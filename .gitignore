@@ -1,0 +1,42 @@
+# ---- Java / Maven ----
+target/
+!.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+!**/mvnw
+*.log
+hs_err_pid*
+
+# ---- Node ----
+node_modules/
+dist/
+dist-ssr/
+.vite/
+npm-debug.log*
+yarn-error.log*
+.eslintcache
+
+# ---- IDE ----
+.idea/
+*.iml
+*.iws
+.vscode/
+!.vscode/extensions.json
+.settings/
+.project
+.classpath
+nbproject/
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Secrets / local overrides ----
+# Never commit real credentials. application.yml ships development defaults only, and
+# every one of them is overridable by an environment variable.
+.env
+.env.local
+*.local
+application-local.yml
+application-secret.yml
