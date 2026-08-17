@@ -1,0 +1,12 @@
+# Keep the build context small - everything here would otherwise be uploaded to the
+# Docker daemon on every build, and target/ alone can be hundreds of megabytes.
+target/
+.idea/
+*.iml
+.vscode/
+.git/
+.gitignore
+*.md
+.mvn/wrapper/maven-wrapper.jar
+Dockerfile
+.dockerignore

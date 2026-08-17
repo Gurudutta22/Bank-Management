@@ -1,0 +1,83 @@
+# =====================================================================================
+# NovaBank - full stack in one command.
+#
+#   docker compose up --build
+#
+#   UI          http://localhost:3000
+#   Swagger UI  http://localhost:3000/swagger-ui.html
+#   API direct  http://localhost:8080/api/v1
+#
+# Three services: PostgreSQL, the Spring Boot API, and nginx serving the React build and
+# proxying /api to the API.
+# =====================================================================================
+
+services:
+  # ---------------------------------------------------------------------- database
+  db:
+    image: postgres:16-alpine
+    container_name: novabank-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: novabank
+      POSTGRES_USER: ${DB_USER:-novabank}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-novabank}
+      # Deterministic collation, so ORDER BY behaves identically on every machine.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      # Named volume: data survives `docker compose down`. Use `down -v` to wipe it.
+      - novabank-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-novabank} -d novabank"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [novabank]
+
+  # ----------------------------------------------------------------------- backend
+  backend:
+    build:
+      context: ./backend
+    container_name: novabank-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        # Not just "started": Flyway runs at boot and would fail against a database that
+        # is still initialising. Waiting for the healthcheck removes that race.
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: postgres
+      DB_URL: jdbc:postgresql://db:5432/novabank
+      DB_USER: ${DB_USER:-novabank}
+      DB_PASSWORD: ${DB_PASSWORD:-novabank}
+      # Override in a real deployment. The app refuses to start on a secret under 32 chars.
+      JWT_SECRET: ${JWT_SECRET:-novabank-docker-signing-key-change-me-in-production-2026}
+      JWT_ACCESS_MINUTES: 15
+      JWT_REFRESH_DAYS: 7
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+    ports:
+      - "8080:8080"
+    networks: [novabank]
+
+  # ---------------------------------------------------------------------- frontend
+  frontend:
+    build:
+      context: ./frontend
+    container_name: novabank-web
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3000:80"
+    networks: [novabank]
+
+networks:
+  novabank:
+    driver: bridge
+
+volumes:
+  novabank-db-data:

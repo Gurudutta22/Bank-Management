@@ -1,0 +1,871 @@
+@import "tailwindcss";
+
+/* Tailwind v4 uses the `dark:` variant against a class on <html>, driven by the theme toggle. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------------------------------------------------------------------------------------
+   Registered custom properties.
+
+   An un-registered custom property cannot be interpolated, which is why the theme switch
+   used to repaint in a single frame. Declaring the two shell-glow colours as `<color>`
+   makes the whole background wash crossfade when `.dark` flips. Must be top level, outside
+   any @layer. Where @property is unsupported the switch simply snaps, i.e. today's
+   behaviour - it degrades to the status quo rather than breaking.
+--------------------------------------------------------------------------------------- */
+@property --glow-1 {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+@property --glow-2 {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
+/* ---------------------------------------------------------------------------------------
+   Design tokens.
+
+   Colours live as CSS custom properties rather than hard-coded Tailwind classes so that
+   light and dark are two values of one variable instead of two parallel sets of markup.
+   Every component then reads `bg-surface` / `text-muted` and themes itself for free.
+
+   The surfaces are not hand-picked hexes: each ladder is one straight line in OKLab between
+   two anchors, sampled at even lightness steps. Because OKLab mixing is linear in L, the
+   mix percentage *is* the lightness dial, so no two neighbouring surfaces can drift in hue
+   and the steps are perceptually even rather than evenly spaced in hex.
+
+   Every ratio quoted in a comment below is measured (WCAG 2.1 relative luminance) against
+   the exact surface hex named, not estimated.
+--------------------------------------------------------------------------------------- */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Brand ramp - a teal/emerald that reads as "money" without being literal about it. */
+  --color-brand-50: #ecfdf7;
+  --color-brand-100: #d1fae7;
+  --color-brand-200: #a7f3d4;
+  --color-brand-300: #6ee7bb;
+  --color-brand-400: #34d39e;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
+  --color-brand-800: #065f46;
+  --color-brand-900: #064e3b;
+
+  /* Secondary ramp for charts and admin surfaces. */
+  --color-iris-400: #818cf8;
+  --color-iris-500: #6366f1;
+  --color-iris-600: #4f46e5;
+
+  --radius-card: 1rem;
+
+  /* Placeholder only - the real, mode-specific value is set in :root / .dark below, because
+     the glow has to be built from that mode's accent so its falloff has somewhere to land. */
+  --shadow-glow: 0 0 0 1px rgb(33 131 92 / 0.14), 0 20px 40px -20px rgb(33 131 92 / 0.3);
+}
+
+/* =======================================================================================
+   LIGHT
+   Surface ladder: one OKLab segment from #ffffff toward --tone-lift #d5dfee (L .9006).
+   L = 1.000 / .992 / .984 / .950 / .928 for overlay / raised / card / page / sunken.
+
+   The two rungs above the card are small (ΔL .008 each) because light mode has no headroom
+   above white - there, elevation is carried by --elev-2 / --elev-3 and the fill step is only
+   there so the tiers do not collapse into one plane if shadows are suppressed. Below the
+   card the steps are large (ΔL .034 to the page) so a card lifts off its background without
+   needing a hard outline.
+======================================================================================= */
+:root {
+  color-scheme: light;
+
+  --tone-lift: #d5dfee;
+
+  --surface-overlay: #ffffff; /* mix 0%.    Modals, popovers, toasts. */
+  --surface-raised: #fcfcfe; /*  mix 9%.    L .9916. 1.02:1 over card, rest from --elev-2. */
+  --surface-card: #f8fafc; /*    mix 16%.   L .9842. Was pure #ffffff - the one achromatic
+                                  token in an otherwise cool ramp, which is why card edges
+                                  read stark. Now it carries the family hue. */
+  --surface-page: #eaeff7; /*    mix 50%.   L .9506. Deepened from #f6f8fb so the card lifts:
+                                  card-on-page goes 1.06:1 -> 1.10:1. That extra separation is
+                                  what lets the border become a whisper without the card
+                                  dissolving into the page. */
+  --surface-sunken: #e0e8f3; /*  mix 72%.   L .9282. Below the page, matching dark mode's
+                                  corrected behaviour. Input fills, wells, skeleton bases. */
+
+  /* An alpha ink, not an opaque hex. One border colour has to sit on five different tiers;
+     an opaque value can only be weighted correctly for one of them. Composited at 4% this
+     holds a constant 1.08:1 on ALL five rungs - and 1.08 is exactly the card-on-page step,
+     so the line is never louder than the surface it delimits. That inversion (old dark:
+     border 1.36 against surface 1.07) is what made the UI read as a wireframe. */
+  --surface-border: rgb(20 28 46 / 0.04);
+
+  /* Control boundaries have a hard 3:1 floor (WCAG 1.4.11); decorative hairlines do not.
+     Splitting the two roles is what lets everything decorative go soft without losing
+     compliance. 3.16 sunken / 3.37 page / 3.65 card / 3.76 raised / 3.86 overlay. */
+  --surface-border-strong: #7b8291;
+
+  /* Hover moves AWAY from the card in the direction that reads as "lifted" - darker here,
+     lighter in dark mode. Every `hover:bg-[var(--surface-sunken)]` used to reverse direction
+     between the two themes because one token was doing both jobs. */
+  --surface-hover: #edf2f8; /* card 72% + tone-lift. ΔL -.022, 1.07:1 on card. */
+  --surface-active: #e6ecf5; /* card 52% + tone-lift. Roughly double the hover step. */
+
+  --text-primary: #111a2b; /*   16.64 card / 15.08 page / 14.10 sunken. Re-hued to the surface
+                                 family so body copy sits in the same family as its paper. */
+  --text-secondary: #3e4858; /*  8.83 card /  8.00 page /  7.48 sunken. */
+  --text-muted: #5e6672; /*      5.55 card /  5.03 page /  4.70 sunken. Raised from #94a3b8,
+                                 which measured 2.56:1 and failed AA outright while being used
+                                 for the sidebar email, footer, hints and every timestamp. */
+  --text-faint: #79818e; /*      3.76 card /  3.40 page /  3.18 sunken. Decorative tier only -
+                                 disabled glyphs, chart direct labels - never body text. Its
+                                 existence is what lets --text-muted be pushed up to AA without
+                                 flattening the hierarchy: steps are .181/.115/.113 instead of
+                                 the old .238/.265. */
+
+  /* Accent text. Every one of these replaces a stock Tailwind step that failed AA on white. */
+  --accent-positive: #1d7350; /* 5.54 card / 5.02 page / 4.70 sunken. Brand hue h162 held
+                                  exactly. Was text-emerald-500 at 2.54:1. */
+  --accent-negative: #9e4823; /* 5.89 / 5.34 / 4.99. h42, deliberately the chart's series2 hue
+                                  family (#eb6834 is h40.6) rather than orange-500 (h47.6,
+                                  C.187 - the loudest chroma in the app), so the Dashboard's
+                                  money-out tile and the money-out series read as one colour. */
+  --accent-warning: #875a14; /*  5.73 / 5.19 / 4.86. Was amber-500 at 2.15:1, used on the
+                                  destructive close-account confirmation. */
+  --accent-info: #5257b8; /*     5.88 / 5.33 / 4.98. Iris hue h277 held. */
+  --accent-danger: #b12a3e; /*   6.14 / 5.56 / 5.20. Was rose-400 at 2.69:1 - the least
+                                  readable text in the app was the text that most needed
+                                  reading. */
+  --accent-favorite: #9c7028; /* 4.21 card / 3.57 sunken. Brass, h74. A favourite star is not
+                                  a warning, so it gets its own token rather than borrowing
+                                  --accent-warning. Was amber-400 at 1.67:1: the brightest,
+                                  lowest-contrast pixel in a list row. */
+
+  /* Solid fills are IDENTICAL in both modes: a solid's label contrast does not depend on the
+     page behind it, so one value serves both and five duplicate decisions disappear. */
+  --accent-positive-solid: #21835c; /* white label 4.70 */
+  --accent-negative-solid: #af5028; /* white label 5.25 */
+  --accent-warning-solid: #966417; /*  white label 5.08 */
+  --accent-info-solid: #5c63cc; /*     white label 5.11 */
+  --accent-danger-solid: #bf2e44; /*   white label 5.69. Was bg-rose-500, where white measured
+                                        3.67:1 - an AA failure on the confirm button of every
+                                        destructive flow. */
+
+  /* Chips are mixed FROM A NAMED SURFACE (card 90% + accent), not alpha-over-whatever-is-
+     behind, so a badge no longer changes appearance when its row is hovered. Values are the
+     resolved result of that mix rather than a live color-mix(), so no token can become
+     invalid on an engine without color-mix support. Accent-on-own-chip: 4.82 / 5.11 / 4.96 /
+     5.08 / 5.30 - all clear AA, which the old /12 alpha syntax quietly hid. */
+  --accent-positive-chip: #e3ecea;
+  --accent-positive-ring: #bdd3c9;
+  --accent-negative-chip: #f0e8e6;
+  --accent-negative-ring: #e2c7be;
+  --accent-warning-chip: #ede9e5;
+  --accent-warning-ring: #d8ccbc;
+  --accent-info-chip: #e6e9f6;
+  --accent-info-ring: #c5cceb;
+  --accent-danger-chip: #f4e6e8;
+  --accent-danger-ring: #ebc2c4;
+
+  /* Shadow ink is the surface family's navy, not pure black: a black shadow over a cool page
+     dirties it, a navy-tinted one blends into it. */
+  --shadow-ink: 20 28 46;
+
+  /* Five layers, blur radii in a ~2.2x progression at near-constant alpha. A single blur has
+     a fixed falloff shape and therefore a discernible edge; stacking them approximates a
+     Gaussian penumbra, so a card edge feathers instead of terminating. This is what replaces
+     the hard border on .surface. */
+  --elev-1: 0 0 0 1px rgb(var(--shadow-ink) / 0.035), 0 1px 1px -0.5px rgb(var(--shadow-ink) / 0.045),
+    0 3px 5px -2px rgb(var(--shadow-ink) / 0.045), 0 8px 14px -6px rgb(var(--shadow-ink) / 0.05),
+    0 18px 32px -14px rgb(var(--shadow-ink) / 0.055);
+  --elev-2: 0 0 0 1px rgb(var(--shadow-ink) / 0.04), 0 2px 3px -1px rgb(var(--shadow-ink) / 0.05),
+    0 6px 11px -4px rgb(var(--shadow-ink) / 0.055), 0 14px 26px -10px rgb(var(--shadow-ink) / 0.065),
+    0 32px 56px -26px rgb(var(--shadow-ink) / 0.08);
+  --elev-3: 0 0 0 1px rgb(var(--shadow-ink) / 0.05), 0 2px 4px -1px rgb(var(--shadow-ink) / 0.05),
+    0 8px 14px -6px rgb(var(--shadow-ink) / 0.06), 0 20px 34px -14px rgb(var(--shadow-ink) / 0.08),
+    0 40px 72px -32px rgb(var(--shadow-ink) / 0.11);
+
+  /* Three layers so the 1px ring and the drop are bridged by a mid term, and derived from the
+     accent rather than a hard-coded rgb(16 185 129) - retuning the brand can no longer leave a
+     mismatched halo around a repainted avatar. */
+  --shadow-glow: 0 0 0 1px rgb(33 131 92 / 0.14), 0 6px 12px -6px rgb(33 131 92 / 0.22),
+    0 20px 40px -20px rgb(33 131 92 / 0.3);
+
+  /* A 60% near-black wash dropped onto a near-white page was the most abrupt tonal jump in
+     light mode. This composites the page to #8d929b, leaving the white dialog at 3.13:1
+     against its own backdrop - separation preserved, cliff removed. The blur and --elev-3
+     carry the rest. */
+  --scrim: rgb(40 46 56 / 0.48);
+
+  --focus-ring: #21835c; /* 4.45 card / 4.11 page / 3.85 sunken / 4.70 overlay - all clear the
+                            3:1 focus-indicator floor. brand-500 measured 2.54:1 and FAILED. */
+  --focus-halo: rgb(33 131 92 / 0.16); /* soft outer skirt, zero contrast cost */
+
+  --selection-bg: #d1ece0; /* card 78% + brand-500. 13.91:1 with --text-primary. */
+  --selection-fg: var(--text-primary); /* replaces a one-off literal #04140e that appeared in
+                                          no ramp and was applied identically in both modes. */
+
+  /* Opaque PEAK colours for the shell wash; the alpha ramp in --shell-gradient does the
+     feathering. L .9903 and .9923 - both LIGHTER than the page (L .9506). The old mint stop
+     #d1fae7 sat at L .951 against a page at L .979, so the "glow" arithmetically darkened the
+     canvas. It was a smudge. */
+  --glow-1: #f3fffc;
+  --glow-2: #fafdff;
+
+  --scroll-thumb: #e1e8f3;
+  --scroll-thumb-hover: #a3c4bc; /* ΔL .135 instead of the old ΔL .233 / ΔC .136 snap to
+                                    full-chroma brand-500, and now eased over 180ms. */
+
+  --grain-opacity: 0.022; /* light barely needs dither - near white, the same alpha spans many
+                             more 8-bit codes - but a trace keeps both modes' texture equal. */
+  /* Sweep ink and peak alpha. Mode-split because the identical alpha was nearly twice as
+     visible in dark (ΔL .062) as in light (ΔL .034) - .12 light against .075 dark brings both
+     to ΔL .048 over --surface-sunken. The ink is --text-muted's triple, so the sweep darkens
+     on light and lightens on dark: the same intent, correctly signed in both themes. */
+  --shimmer-ink: 94 102 114;
+  --shimmer-peak: 0.12;
+
+  --glass-base: var(--surface-card);
+  --glass-opacity: 86%;
+
+  /* Password-strength meter. Pinned to one flat lightness band (L .5347/.5353/.5361) so the bar
+     progresses in hue alone; the old ramp was two Tailwind literals plus one token and jumped
+     hue, chroma and lightness unevenly. 5.35 / 5.06 / 4.63 on the card. */
+  --meter-weak: #b3404b;
+  --meter-medium: #966000;
+  --meter-strong: #008258;
+
+  /* Wordmark: flat lightness per mode, hue alone moves across the four anchors. A text
+     gradient with ΔL 0.000 cannot band on 2px glyph stems, which is exactly where chroma and
+     lightness loss show worst. All four sit at L .5353-.5362. 4.67 / 4.74 / 4.87 / 5.04 on the
+     card - the old brand-400 -> iris-400 pair measured about 1.85:1 and was illegible here. */
+  --wordmark-1: #21805a;
+  --wordmark-2: #007c87;
+  --wordmark-3: #2874a4;
+  --wordmark-4: #6166a9;
+
+  /* Motion. The direction's core claim is that smoothness lives in transitions, so the timing
+     is tokenised alongside the colour. --ease-smooth decelerates without overshoot;
+     --ease-inout is for opacity, which must NOT be front-loaded or the fade reads as a pop. */
+  --dur-1: 140ms;
+  --dur-2: 220ms;
+  --dur-3: 420ms;
+  --ease-smooth: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* =======================================================================================
+   DARK
+   Surface ladder: one OKLab segment from --tone-base #04070e (L .128) toward --tone-lift
+   #38496f (L .409). L = .150 / .185 / .222 / .255 / .288, i.e. even ~.034 rungs.
+
+   Dark is the mirror image of light, not its inversion: here elevation IS luminosity (a black
+   shadow has little room to work against a dark page), so every tier carries a real lightness
+   step and the shadows only reinforce it. The page is deliberately lifted off near-black -
+   sRGB quantisation is perceptually coarsest there, which is what made the shell gradient band
+   and what pushes the near-white-on-near-black luminance span (halation) higher than it needs
+   to be.
+
+   Ratios in dark are quoted with ΔL alongside where the numbers are small: WCAG ratio is
+   compressive below L .25 and makes this ladder look flatter than it reads.
+======================================================================================= */
+.dark {
+  color-scheme: dark;
+
+  --tone-base: #04070e;
+  --tone-lift: #38496f;
+
+  --surface-sunken: #060b14; /*  mix  8%.  L .1488. FIXES A SEMANTIC INVERSION: the old
+                                  #0a101c sat at L .1736, LIGHTER than the page, so "sunken"
+                                  was brighter than the surface it was meant to recede into. */
+  --surface-page: #0c131f; /*    mix 20%.  L .1862. */
+  --surface-card: #131b2b; /*    mix 33%.  L .2228. 1.08:1 over page. */
+  --surface-raised: #192236; /*  mix 45%.  L .2538. 1.09:1 over card. */
+  --surface-overlay: #1f2a42; /* mix 57%.  L .2871. 1.11:1 over raised. Modals, toasts. */
+
+  /* Same alpha-ink construction as light, inverted. 1.06-1.09:1 across all five rungs, i.e.
+     at or below the surface step at every level. The old #1e2942 sat at L .2837 and gave
+     border-on-page 1.36:1 while card-on-page was 1.07:1 - the brightest jump in the whole
+     dark ramp belonged to a 1px line. */
+  --surface-border: rgb(174 184 202 / 0.045);
+  --surface-border-strong: #737c8d; /* 4.69 sunken / 4.43 page / 4.10 card / 3.78 raised /
+                                       3.40 overlay - clears 3:1 on every surface an input
+                                       can land on, including inside a modal. */
+
+  --surface-hover: #172032; /* card + tone-lift, ΔL +.021. Brightens here, darkens in light -
+                               the same intent, correctly signed in both themes. */
+  --surface-active: #1a2438; /* ΔL +.038. */
+
+  --text-primary: #e9eef6; /*   14.78 card / 15.97 page / 12.28 overlay. Nudged down from
+                                 #f1f5f9 (L .968 -> .955): together with the lifted page this
+                                 narrows the luminance span at both ends, which is what
+                                 actually reduces halation on OLED and for astigmatic readers.
+                                 Still far above AAA. */
+  --text-secondary: #b0b8c4; /*  8.61 card / 7.15 overlay. Replaces #94a3b8, which was the
+                                 same hex as the LIGHT theme's --text-muted doing another job. */
+  --text-muted: #8d95a2; /*      5.70 card / 5.25 raised / 4.74 overlay. Raised from #64748b,
+                                 which measured 3.86:1 and failed AA for body text. */
+  --text-faint: #717a88; /*      3.97 card / 3.66 raised / 3.30 overlay. Decorative only. The
+                                 dark ladder is now .955/.780/.654/.552 - steps of .175/.126/
+                                 .102 versus the old .258/.156, where muted and secondary
+                                 crowded together and the hierarchy compressed. */
+
+  --accent-positive: #74d1a5; /*  9.35 card / 8.62 raised / 7.77 overlay */
+  --accent-negative: #ee9974; /*  7.75 / 7.14 / 6.43. h44 - the dark chart series2 family. */
+  --accent-warning: #e5b46e; /*   9.09 / 8.38 / 7.55. amber-500 measured 8.55:1 in dark against
+                                  2.15:1 in light: one Tailwind step asked to serve two
+                                  surfaces, near-invisible on one and glaring on the other.
+                                  Each mode now gets its own selected value. */
+  --accent-info: #a8b1f7; /*      8.44 / 7.78 / 7.01 */
+  --accent-danger: #f0828c; /*    6.79 / 6.25 / 5.64 */
+  --accent-favorite: #d7b16f; /*  8.54 card */
+
+  /* Identical to light - see the note there. Against the dark card these read 3.03-3.66:1 as
+     large filled shapes, above the 3:1 non-text floor. */
+  --accent-positive-solid: #21835c;
+  --accent-negative-solid: #af5028;
+  --accent-warning-solid: #966417;
+  --accent-info-solid: #5c63cc;
+  --accent-danger-solid: #bf2e44;
+
+  /* Dark chips are hand-picked at oklch(.295 .050 h) rather than mixed from the card, because
+     OKLab-mixing a WARM accent into a COOL low-chroma dark surface cancels the a/b components:
+     a warning chip built that way resolved to C .0125 at h279 - a cold grey, hue gone. Fixing
+     the hue explicitly keeps each chip in its accent's family (h163/45/76/278/17). Text on its
+     own chip: 7.40 / 6.34 / 7.35 / 6.85 / 5.57. */
+  --accent-positive-chip: #113425;
+  --accent-positive-ring: #1d533c;
+  --accent-negative-chip: #412417;
+  --accent-negative-ring: #673a27;
+  --accent-warning-chip: #3b290c;
+  --accent-warning-ring: #5d4216;
+  --accent-info-chip: #272a45;
+  --accent-info-ring: #3f436d;
+  --accent-danger-chip: #422224;
+  --accent-danger-ring: #68373b;
+
+  /* Pure black here, and it does work rather than vanish: because the page is L .186 rather
+     than zero, black at 55% costs a real ΔL. The old single-layer rgb(0 0 0 / .45) "did
+     nothing" only because it was one layer at one radius. */
+  --shadow-ink: 0 0 0;
+
+  /* Dark elevation is inverted: a 1px inset top highlight reads as a lit edge, the black
+     layers do the ambient occlusion. That is the depth cue a black-only shadow cannot give. */
+  --elev-1: inset 0 1px 0 rgb(255 255 255 / 0.025), 0 0 0 1px rgb(0 0 0 / 0.3),
+    0 1px 2px -1px rgb(0 0 0 / 0.34), 0 4px 8px -4px rgb(0 0 0 / 0.4), 0 14px 26px -12px rgb(0 0 0 / 0.46);
+  --elev-2: inset 0 1px 0 rgb(255 255 255 / 0.03), 0 0 0 1px rgb(0 0 0 / 0.34),
+    0 2px 4px -2px rgb(0 0 0 / 0.38), 0 8px 16px -6px rgb(0 0 0 / 0.46), 0 24px 44px -20px rgb(0 0 0 / 0.54);
+  --elev-3: inset 0 1px 0 rgb(255 255 255 / 0.035), 0 0 0 1px rgb(0 0 0 / 0.4),
+    0 4px 8px -3px rgb(0 0 0 / 0.42), 0 16px 30px -12px rgb(0 0 0 / 0.5), 0 40px 72px -32px rgb(0 0 0 / 0.62);
+
+  /* Built from the dark accent (L .79) rather than brand-500, so the halo has somewhere to
+     fall off to against an L .186 page. The old -18px spread on a 40px blur terminated
+     abruptly because the surrounding lightness range was too small to hide the edge. */
+  --shadow-glow: 0 0 0 1px rgb(116 209 165 / 0.18), 0 6px 14px -6px rgb(116 209 165 / 0.26),
+    0 22px 44px -22px rgb(116 209 165 / 0.34);
+
+  /* Light and dark want opposite treatments from this token. slate-950/60 barely registered
+     over an already-dark page; this composites it to L .140, genuinely below the page's .186
+     and .147 below the overlay tier the dialog sits on. */
+  --scrim: rgb(2 3 7 / 0.62);
+
+  --focus-ring: #74d1a5; /* 9.35 card / 10.11 page / 7.77 overlay. The single old token gave
+                            7.24:1 here and 2.54:1 in light; now both modes are selected. */
+  --focus-halo: rgb(116 209 165 / 0.2);
+
+  --selection-bg: #1d4645; /* card 70% + brand-500. 8.95:1 with --text-primary. The old
+                              selection was full-chroma brand-500 at L .696 on an L .150 page -
+                              the highest-chroma large fill anywhere in dark mode, a saturated
+                              flash with a .55 lightness jump. This one steps .13. */
+  --selection-fg: var(--text-primary);
+
+  /* Peak colours of the two blooms, matched in lightness (L .3004 / .2987) so their overlap
+     does not produce a third, brighter zone. Against a page at L .186 the span is .114 - about
+     double the old ~.077, which roughly doubles the number of distinct 8-bit codes available
+     across the falloff and halves the band width before dither is even applied. */
+  --glow-1: #14352a;
+  --glow-2: #272b46;
+
+  --scroll-thumb: #242c3c;
+  --scroll-thumb-hover: #3b595b; /* ΔL .148 instead of the old ΔL .412 single-frame jump from
+                                    #1e2942 to brand-500 - the largest uncushioned colour delta
+                                    in the whole stylesheet. */
+
+  --grain-opacity: 0.05; /* load-bearing here. sRGB quantisation is perceptually coarse near
+                            black, so no number of gradient stops alone removes the Mach edges;
+                            +/-2-3/255 of monochrome noise dissolves them. */
+  --shimmer-ink: 141 149 162;
+  --shimmer-peak: 0.075;
+
+  --glass-base: var(--surface-raised);
+  --glass-opacity: 84%;
+
+  /* Same construction, own band for the dark surface: L .7013/.7011/.6996, 6.10/6.33/6.83. */
+  --meter-weak: #e47b80;
+  --meter-medium: #d09033;
+  --meter-strong: #3fb785;
+
+  /* Same OKLab path as light, lifted to a flat L .785 for the dark surface. 9.16 / 9.11 /
+     8.88 / 8.63 on the card. Making the wordmark mode-aware is what lets light mode become
+     legible without dulling dark - dark is not an inversion of light. */
+  --wordmark-1: #72cfa3;
+  --wordmark-2: #51cddb;
+  --wordmark-3: #74c2f9;
+  --wordmark-4: #aab2ff;
+}
+
+/* ---------------------------------------------------------------------------------------
+   Shell background wash.
+
+   ONE geometry shared by both modes; only --glow-1 / --glow-2 differ. Eight stops on an alpha
+   profile of 100/88/68/45/24/10/3/0 - a smoothstep whose first derivative approaches zero at
+   BOTH ends, so there is no crease where the wash starts and no visible terminus where it
+   meets the canvas. The old two-stop version blended mint and periwinkle in sRGB and landed on
+   #d9f1f3 (h202.8), a cyan present in neither stop.
+
+   The fallback below varies alpha only on a fixed rgb triple - which is exactly what
+   color-mix() against `transparent` computes, since mixing with transparent is premultiplied
+   and touches nothing but alpha. So the fallback is not a degraded version, it is the same
+   render; the color-mix form exists only so --glow-N stays a live reference and the whole wash
+   can crossfade on theme switch.
+--------------------------------------------------------------------------------------- */
+:root {
+  --shell-gradient: radial-gradient(
+      1400px 780px at 12% -16%,
+      rgb(243 255 252 / 1) 0%,
+      rgb(243 255 252 / 0.88) 14%,
+      rgb(243 255 252 / 0.68) 28%,
+      rgb(243 255 252 / 0.45) 42%,
+      rgb(243 255 252 / 0.24) 56%,
+      rgb(243 255 252 / 0.1) 70%,
+      rgb(243 255 252 / 0.03) 84%,
+      rgb(243 255 252 / 0) 100%
+    ),
+    radial-gradient(
+      1150px 660px at 92% -6%,
+      rgb(250 253 255 / 1) 0%,
+      rgb(250 253 255 / 0.86) 15%,
+      rgb(250 253 255 / 0.64) 30%,
+      rgb(250 253 255 / 0.41) 45%,
+      rgb(250 253 255 / 0.21) 60%,
+      rgb(250 253 255 / 0.08) 74%,
+      rgb(250 253 255 / 0.02) 87%,
+      rgb(250 253 255 / 0) 100%
+    );
+}
+
+.dark {
+  --shell-gradient: radial-gradient(
+      1400px 780px at 12% -16%,
+      rgb(20 53 42 / 1) 0%,
+      rgb(20 53 42 / 0.88) 14%,
+      rgb(20 53 42 / 0.68) 28%,
+      rgb(20 53 42 / 0.45) 42%,
+      rgb(20 53 42 / 0.24) 56%,
+      rgb(20 53 42 / 0.1) 70%,
+      rgb(20 53 42 / 0.03) 84%,
+      rgb(20 53 42 / 0) 100%
+    ),
+    radial-gradient(
+      1150px 660px at 92% -6%,
+      rgb(39 43 70 / 1) 0%,
+      rgb(39 43 70 / 0.86) 15%,
+      rgb(39 43 70 / 0.64) 30%,
+      rgb(39 43 70 / 0.41) 45%,
+      rgb(39 43 70 / 0.21) 60%,
+      rgb(39 43 70 / 0.08) 74%,
+      rgb(39 43 70 / 0.02) 87%,
+      rgb(39 43 70 / 0) 100%
+    );
+}
+
+@supports (background: color-mix(in oklab, red 50%, transparent)) {
+  :root,
+  .dark {
+    --shell-gradient: radial-gradient(
+        1400px 780px at 12% -16%,
+        color-mix(in oklab, var(--glow-1) 100%, transparent) 0%,
+        color-mix(in oklab, var(--glow-1) 88%, transparent) 14%,
+        color-mix(in oklab, var(--glow-1) 68%, transparent) 28%,
+        color-mix(in oklab, var(--glow-1) 45%, transparent) 42%,
+        color-mix(in oklab, var(--glow-1) 24%, transparent) 56%,
+        color-mix(in oklab, var(--glow-1) 10%, transparent) 70%,
+        color-mix(in oklab, var(--glow-1) 3%, transparent) 84%,
+        transparent 100%
+      ),
+      radial-gradient(
+        1150px 660px at 92% -6%,
+        color-mix(in oklab, var(--glow-2) 100%, transparent) 0%,
+        color-mix(in oklab, var(--glow-2) 86%, transparent) 15%,
+        color-mix(in oklab, var(--glow-2) 64%, transparent) 30%,
+        color-mix(in oklab, var(--glow-2) 41%, transparent) 45%,
+        color-mix(in oklab, var(--glow-2) 21%, transparent) 60%,
+        color-mix(in oklab, var(--glow-2) 8%, transparent) 74%,
+        color-mix(in oklab, var(--glow-2) 2%, transparent) 87%,
+        transparent 100%
+      );
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--surface-border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    /* -webkit- scrollbar rules never reach Firefox, and that gap gets more visible now that
+       color-scheme is declared and the UA stops painting a light scrollbar in dark mode. */
+    scrollbar-color: var(--scroll-thumb) transparent;
+    scrollbar-width: thin;
+  }
+
+  body {
+    background-color: var(--surface-page);
+    background-image: var(--shell-gradient);
+    background-attachment: fixed;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Dither layer. Even with eight stops the dark wash traverses only ~35 distinct 8-bit codes
+     across a 780px falloff - roughly 22px per step, which is exactly the width at which Mach
+     banding becomes visible. An 8-bit buffer simply cannot hold a smooth falloff at low
+     lightness however you interpolate it, so noise is the fix, not more stops.
+
+     `position: fixed` puts the grain in the same coordinate space as `background-attachment:
+     fixed`, so the two never shear against each other as the page scrolls. z-index:-1 (rather
+     than 0) keeps it behind all app content without needing a stacking-context fix on #root,
+     and without swallowing pointer events. */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: var(--grain-opacity);
+    background-repeat: repeat;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* One cushioned default for everything that changes colour on interaction, box-shadow
+     included - so hovering a card raises its elevation smoothly rather than snapping it.
+     Replaces the scattered `transition-colors` / `transition-all duration-200` utilities;
+     `all` was also animating transform and fighting `active:scale-[0.98]`. */
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  [role="button"],
+  .surface,
+  .surface-raised,
+  .surface-overlay,
+  .glass {
+    transition-property: background-color, border-color, color, fill, stroke, box-shadow, opacity;
+    transition-duration: var(--dur-2);
+    transition-timing-function: var(--ease-smooth);
+  }
+
+  /* Numbers in a bank must line up column to column: tabular figures stop the digits
+     jittering as balances change. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  ::selection {
+    background: var(--selection-bg);
+    color: var(--selection-fg);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--scroll-thumb);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+    transition: background-color 180ms var(--ease-smooth);
+  }
+
+  /* Two fixes for the largest uncushioned delta in the stylesheet: a much smaller step (both
+     hover values are derived from the thumb itself rather than jumping to full-chroma brand)
+     and an actual transition. Where an engine ignores transitions on scrollbar pseudo-elements
+     the reduced delta alone still removes the snap. */
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scroll-thumb-hover);
+    background-clip: content-box;
+  }
+
+  /* Focus rings are a keyboard user's only cue for where they are - never remove them.
+     --focus-ring is now mode-selected because one token cannot serve both: brand-500 measured
+     2.54:1 on the light card, below the 3:1 WCAG 1.4.11 minimum, while measuring 7.24:1 on the
+     dark one. The 6px halo feathers the outer edge at zero contrast cost - the ring itself
+     still carries all of it. */
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: 0.375rem;
+    box-shadow: 0 0 0 6px var(--focus-halo);
+    transition: box-shadow var(--dur-1) var(--ease-smooth);
+  }
+}
+
+@layer components {
+  /* The border stays - removing it would mean touching every consumer - but it is now a
+     whisper and the shadow does the separating. Light mode gets its raised/overlay tiers
+     mostly from --elev-2/--elev-3; dark mode gets them from the luminosity ladder with the
+     shadows reinforcing. Same API, opposite mechanisms. */
+  .surface {
+    background-color: var(--surface-card);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--elev-1);
+  }
+
+  .surface-raised {
+    background-color: var(--surface-raised);
+    border: 1px solid var(--surface-border);
+    box-shadow: var(--elev-2);
+  }
+
+  /* Modals, toasts and popovers: above cards by construction rather than by a stock shadow. */
+  .surface-overlay {
+    background-color: var(--surface-overlay);
+    border: 1px solid var(--surface-border);
+    box-shadow: var(--elev-3);
+  }
+
+  /* Frosted panel used for the sidebar and modals.
+     saturate(140%) is a linear matrix applied in sRGB: it pushes already-saturated backdrop
+     content toward gamut clipping, and a clipped channel shifts hue - producing a visible
+     saturation seam exactly at the sidebar edge where filtered and unfiltered regions meet.
+     112% keeps the frost without the seam. The dark base moves to --surface-raised so the
+     panel reads as elevated rather than as a hole. The mix stays `in srgb` deliberately:
+     mixing against transparent only touches alpha, so there is no hue path to correct. */
+  .glass {
+    background-color: color-mix(in srgb, var(--glass-base) var(--glass-opacity), transparent);
+    backdrop-filter: blur(16px) saturate(112%);
+    border: 1px solid var(--surface-border);
+    box-shadow: var(--elev-2);
+  }
+
+  .text-secondary {
+    color: var(--text-secondary);
+  }
+
+  .text-muted {
+    color: var(--text-muted);
+  }
+
+  .text-faint {
+    color: var(--text-faint);
+  }
+
+  /* Six anchors instead of two stops, fixing three things at once.
+     MUD: the old second leg crossed 114 degrees of hue as a straight line through the RGB
+     cube, collapsing to C .102 at the midpoint against endpoint chromas of .127 and .204.
+     These anchors hold a chroma floor of .092 with endpoints at .112 and .155.
+     RHYTHM: the old L profile fell .696 -> .596 over the first 45% and then stalled at
+     .596 -> .585 over the remaining 55%. This one runs .5456 -> .5174 monotonically, so the
+     sweep reads as one plane of colour rotating in hue with no dark band and no stall.
+     CONTRAST: white now measures 4.67 / 4.75 / 4.85 / 5.09 / 5.42 / 5.83 at the six stops. The
+     old gradient started at brand-500 where white was 2.54:1 - a live AA failure on the primary
+     Button, every avatar and the Transactions filter pill.
+     Because the path is carried by the anchors themselves, the sRGB fallback below is a close
+     approximation of the OKLab one rather than the muddy chord - the interpolation hint is a
+     refinement here, not the fix. */
+  .brand-gradient {
+    background-image: linear-gradient(
+      135deg,
+      #19845c 0%,
+      #00826f 22%,
+      #007e86 42%,
+      #00779d 60%,
+      #276cb2 78%,
+      #555abf 100%
+    );
+    background-image: linear-gradient(
+      135deg in oklab,
+      #19845c 0%,
+      #00826f 22%,
+      #007e86 42%,
+      #00779d 60%,
+      #276cb2 78%,
+      #555abf 100%
+    );
+  }
+
+  /* The auth panel is the largest single colour field in the product and the only place a
+     gradient carries body copy, so it gets its own deeper, quieter sweep rather than reusing
+     the button gradient under a scrim. Sampled across the run, solid white measures 8.87 down
+     to 7.26 and white/75 measures 5.78 down to 4.92 - so the whole marketing ladder clears AA
+     on its own, and the panel no longer needs a flat darkening layer that would kill its
+     depth. Chroma is held at .085 and lightness climbs only .400 -> .460, which is what keeps
+     it a deep wash rather than a second logo. */
+  .auth-gradient {
+    background-image: linear-gradient(150deg, #065539 0%, #005859 34%, #0c5979 68%, #4c5387 100%);
+    background-image: linear-gradient(
+      150deg in oklab,
+      #065539 0%,
+      #005859 34%,
+      #0c5979 68%,
+      #4c5387 100%
+    );
+  }
+
+  /* Clipped to text, so this was the worst-placed gradient in the app: the old 111-degree sRGB
+     arc dipped to C .091 at its midpoint against endpoints of .150/.158, and that dip landed
+     on 2px glyph stems in the middle of the wordmark. Chroma loss is far more visible on thin
+     strokes than on a large fill. Four anchors at a FLAT lightness per mode mean only hue
+     moves, so there is no lightness travel left to band on a stem at all. */
+  .brand-text-gradient {
+    background-image: linear-gradient(
+      120deg,
+      var(--wordmark-1),
+      var(--wordmark-2) 34%,
+      var(--wordmark-3) 66%,
+      var(--wordmark-4)
+    );
+    background-image: linear-gradient(
+      120deg in oklab,
+      var(--wordmark-1),
+      var(--wordmark-2) 34%,
+      var(--wordmark-3) 66%,
+      var(--wordmark-4)
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Skeleton shimmer shown while data loads, so the layout never jumps. */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--surface-sunken);
+  }
+
+  /* The old three-stop ramp was a triangle - linear rise, linear fall, a first-derivative
+     discontinuity at the 50% stop - so the sweep showed a soft crease at its apex instead of
+     gliding. Seven stops on a .25/.75/peak/.75/.25 profile approximate a Gaussian, which has
+     no ridge.
+
+     Written as one rgb() triple at varying alpha rather than color-mix: every stop shares a
+     colour and only opacity moves, so sRGB and OKLab interpolation are provably identical
+     here and no interpolation hint or fallback declaration is needed at all. Fading to
+     `rgb(ink / 0)` rather than the `transparent` keyword also sidesteps the premultiply
+     question outright. */
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      rgb(var(--shimmer-ink) / 0) 0%,
+      rgb(var(--shimmer-ink) / calc(var(--shimmer-peak) * 0.25)) 18%,
+      rgb(var(--shimmer-ink) / calc(var(--shimmer-peak) * 0.75)) 34%,
+      rgb(var(--shimmer-ink) / var(--shimmer-peak)) 50%,
+      rgb(var(--shimmer-ink) / calc(var(--shimmer-peak) * 0.75)) 66%,
+      rgb(var(--shimmer-ink) / calc(var(--shimmer-peak) * 0.25)) 82%,
+      rgb(var(--shimmer-ink) / 0) 100%
+    );
+    animation: shimmer 1.9s infinite;
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Split in two on purpose. cubic-bezier(0.22, 1, 0.36, 1) is ease-out-expo family: it reaches
+   ~90% progress in the first third of its duration, so on a 450ms animation the opacity was
+   effectively finished in ~150ms and the entrance read as a pop carried entirely by the
+   translate. Transform genuinely wants that curve - deceleration reads as physical. Opacity
+   does not; a symmetric ease keeps the blend perceptible across its whole duration. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rise-up {
+  from {
+    transform: translateY(10px);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.animate-fade-up {
+  animation:
+    fade-in 380ms var(--ease-inout) both,
+    rise-up 520ms var(--ease-smooth) both;
+}
+
+/* Theme-switch crossfade, scoped behind a class that ThemeContext adds for the duration of the
+   switch only, so the 420ms rule never slows an ordinary hover. Naming --glow-1 and --glow-2 in
+   the list is what carries the shell wash across: because they are @property-registered
+   <color>s the gradient repaints continuously as they interpolate, instead of the whole page
+   repainting in one frame.
+
+   DELIBERATELY UNLAYERED. It ships `!important`, and for important declarations the cascade
+   inverts: a layered !important beats an unlayered one. Inside @layer base this rule would
+   therefore have silently outranked the prefers-reduced-motion override at the bottom of this
+   file and broken it. Unlayered, both are peers and plain source order decides - which is why
+   the reduced-motion block must stay last. */
+html.theme-anim,
+html.theme-anim *,
+html.theme-anim *::before,
+html.theme-anim *::after {
+  transition:
+    background-color var(--dur-3) var(--ease-inout),
+    border-color var(--dur-3) var(--ease-inout),
+    color var(--dur-3) var(--ease-inout),
+    fill var(--dur-3) var(--ease-inout),
+    stroke var(--dur-3) var(--ease-inout),
+    box-shadow var(--dur-3) var(--ease-inout),
+    --glow-1 var(--dur-3) var(--ease-inout),
+    --glow-2 var(--dur-3) var(--ease-inout) !important;
+}
+
+/* Respect users who have asked their OS to reduce motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* The theme-switch rule ships `!important`, so the `*` block above cannot reach it on
+     specificity alone - it has to be neutralised by name, and this block has to come after it
+     in source order. The grain layer is static and needs no exemption. */
+  html.theme-anim,
+  html.theme-anim *,
+  html.theme-anim *::before,
+  html.theme-anim *::after {
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- One value cannot serve both themes: these paint the mobile browser chrome to match
+         whichever --surface-page is actually about to be used. -->
+    <meta name="theme-color" content="#eaeff7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0c131f" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="NovaBank - secure online banking: accounts, transfers, statements and analytics." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>NovaBank | Online Banking</title>
+    <!-- Resolve the theme BEFORE first paint. <html> used to be hard-coded to class="dark", so
+         a light-mode user got a full dark paint that flipped to light on hydration - the single
+         harshest transition in the product. This mirrors the same storage key and OS fallback
+         that ThemeContext uses, so the two can never disagree. -->
+    <script>
+      try {
+        var saved = localStorage.getItem('novabank.theme')
+        var dark = saved === 'dark' || (saved !== 'light' && !matchMedia('(prefers-color-scheme: light)').matches)
+        document.documentElement.classList.toggle('dark', dark)
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+      } catch (e) {
+        /* private mode / storage disabled - fall through to the CSS default */
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

@@ -1,0 +1,12 @@
+# node_modules is reinstalled inside the image by `npm ci`; copying the host's copy would
+# be slow and could carry platform-specific binaries that do not run on Alpine.
+node_modules/
+dist/
+.vite/
+.git/
+.gitignore
+*.md
+Dockerfile
+.dockerignore
+.env
+.env.local
