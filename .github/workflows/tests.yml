@@ -1,0 +1,65 @@
+# =====================================================================================
+# Backend test suite - runs on every push and PR against main.
+#
+# This is the workflow that backs the "Tests passing" badge in the README. If the badge
+# ever goes red, this is where to look. The suite includes the concurrency integration
+# test that starts 20 threads on a shared account and asserts money is conserved to the
+# last rupee - if that ever fails, the locking design has regressed.
+# =====================================================================================
+
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # A manual trigger button in the Actions tab, handy when re-running after a flaky infra hiccup.
+  workflow_dispatch:
+
+# One run per branch: a follow-up push cancels the previous run so we don't queue redundant work.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (JDK 21)
+    runs-on: ubuntu-latest
+    # Concurrency IT starts 20 real threads; the free runner has 2 vCPUs but plenty of memory,
+    # so it passes reliably - a generous timeout is enough of a safety net.
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Temurin JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          # Caches ~/.m2/repository keyed on pom.xml, so second-run wall time is ~30s not ~3min.
+          cache: maven
+
+      - name: Show toolchain
+        run: |
+          java -version
+          ./backend/mvnw -v
+
+      - name: Run tests
+        working-directory: backend
+        # -B: batch mode (no progress bars in the log)
+        # -ntp: no transfer progress (quieter dependency download output)
+        # --file pom.xml: explicit, so the step is copy-pasteable
+        run: ./mvnw -B -ntp --file pom.xml test
+
+      # Attach surefire reports on failure so the run page has enough detail to diagnose
+      # without cloning locally and re-running.
+      - name: Upload surefire reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: backend/target/surefire-reports/
+          retention-days: 7
