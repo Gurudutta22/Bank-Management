@@ -1,0 +1,37 @@
+# =====================================================================================
+# Cross-platform hygiene for this repo.
+#
+# Without this, checking out on Windows and pushing to a Linux CI causes two problems
+# I have already hit: the Maven wrapper loses its executable bit and CI fails at the
+# first ./mvnw call, and every commit spams "LF will be replaced by CRLF" warnings
+# for every text file touched.
+# =====================================================================================
+
+# Default: normalise text files to LF in the repo, let the OS decide the working copy.
+# This stops PowerShell CRLF endings from creeping into the committed blob.
+* text=auto eol=lf
+
+# Shell scripts and the Maven wrapper: LF and executable, no exceptions - Linux CI
+# reads these and needs the exec bit set even when they were committed from Windows.
+*.sh text eol=lf
+mvnw text eol=lf
+gradlew text eol=lf
+
+# Windows-only launchers: always CRLF so cmd.exe parses them correctly.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binary assets: mark explicitly so git never tries to "fix" line endings inside them.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.pdf binary
+*.jar binary
+*.woff binary
+*.woff2 binary
+
+# Keep large binary review noise out of `git diff` output.
+docs/screenshots/** linguist-generated=true
+package-lock.json linguist-generated=true
