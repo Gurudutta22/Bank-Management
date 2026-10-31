@@ -100,10 +100,15 @@ public class DemoDataSeeder implements ApplicationRunner {
                 "Customer@123", Role.CUSTOMER, LocalDate.of(1993, 1, 28), "7 MG Road, Pune");
         User ananya = user("Ananya Iyer", "ananya@novabank.io", "9800000004",
                 "Customer@123", Role.CUSTOMER, LocalDate.of(1999, 6, 17), "21 Marine Drive, Mumbai");
+        // A deliberately-named recipient with a fresh balance. For live demos: sign in as Priya,
+        // transfer to "Demo Recipient", watch the receiver balance jump from the opening deposit.
+        User demo = user("Demo Recipient", "demo@novabank.io", "9800000099",
+                "Demo@1234", Role.CUSTOMER, LocalDate.of(2000, 1, 1), "Demo account for live transfers");
 
         admin.setKycVerified(true);
         priya.setKycVerified(true);
         rahul.setKycVerified(true);
+        demo.setKycVerified(true);
 
         Account priyaSavings = account("900100100101", priya, AccountType.SAVINGS,
                 new BigDecimal("184500.0000"), limit);
@@ -114,11 +119,18 @@ public class DemoDataSeeder implements ApplicationRunner {
         Account ananyaSavings = account("900100100301", ananya, AccountType.SAVINGS,
                 new BigDecimal("41200.0000"), limit);
         account("900100100001", admin, AccountType.CURRENT, new BigDecimal("1000000.0000"), limit);
+        // Memorable account number ending ....9999 makes the demo recipient trivial to recognise
+        // in the transactions table after a transfer. 500 opening balance = the SAVINGS minimum.
+        Account demoAccount = account("900100109999", demo, AccountType.SAVINGS,
+                new BigDecimal("500.0000"), limit);
 
         beneficiaryRepository.save(favourite(new Beneficiary(
                 priya, rahulSavings.getAccountNumber(), "Rahul (rent)", rahul.getFullName())));
         beneficiaryRepository.save(new Beneficiary(
                 priya, ananyaSavings.getAccountNumber(), "Ananya", ananya.getFullName()));
+        // Pinned to the top of Priya's payee list so a demo flow needs zero typing.
+        beneficiaryRepository.save(favourite(new Beneficiary(
+                priya, demoAccount.getAccountNumber(), "Demo Recipient (for live demos)", demo.getFullName())));
         beneficiaryRepository.save(favourite(new Beneficiary(
                 rahul, priyaSavings.getAccountNumber(), "Priya", priya.getFullName())));
 
@@ -141,6 +153,7 @@ public class DemoDataSeeder implements ApplicationRunner {
                   Customer  : priya@novabank.io    / Customer@123
                   Customer  : rahul@novabank.io    / Customer@123
                   Customer  : ananya@novabank.io   / Customer@123
+                  Demo recv : demo@novabank.io     / Demo@1234     (acct ...9999, bal Rs. 500)
                 ----------------------------------------------------------
                   Swagger UI: http://localhost:8080/swagger-ui.html
                 ==========================================================

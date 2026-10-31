@@ -289,6 +289,18 @@ against your local H2 or PostgreSQL — there is no hosted instance to attack.**
 | Customer | `priya@novabank.io` | `Customer@123` |
 | Customer | `rahul@novabank.io` | `Customer@123` |
 | Customer | `ananya@novabank.io` | `Customer@123` |
+| Demo recipient | `demo@novabank.io` | `Demo@1234` |
+
+**Fast demo flow** — show a transfer in 30 seconds:
+
+1. Sign in as **Priya** → **Transfer** screen
+2. Click the pinned payee **"Demo Recipient (for live demos)"** at the top
+3. Enter any amount, send
+4. Sign out, sign back in as **demo@novabank.io / Demo@1234**
+5. The transfer appears instantly in Demo Recipient's dashboard and the new balance is visible
+
+The demo recipient starts with the ₹500 minimum opening balance, so every rupee you send
+shows up clearly against a known baseline.
 
 ---
 
