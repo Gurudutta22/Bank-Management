@@ -55,6 +55,7 @@ class TransactionServiceTest {
     @Mock private AccountRepository accountRepository;
     @Mock private TransactionRepository transactionRepository;
     @Mock private AuditService auditService;
+    @Mock private com.gurudutta.bank.user.UserRepository userRepository;
 
     @InjectMocks private TransactionService transactionService;
 
@@ -72,7 +73,10 @@ class TransactionServiceTest {
                         new BigDecimal("500000.00"),   // max single transaction
                         new BigDecimal("100000.00"),   // default daily limit
                         new BigDecimal("500.00"),      // savings minimum balance
-                        new BigDecimal("10000.00")));  // current overdraft
+                        new BigDecimal("10000.00")),   // current overdraft
+                // Tests pre-wire the destinations they care about, so disable the demo
+                // auto-create path - keeps the unit tests about business rules only.
+                new AppProperties.Demo(false));
         ReflectionTestUtils.setField(transactionService, "props", props);
 
         owner = new User("Test Owner", "owner@test.io", "9000000001", "hash", Role.CUSTOMER);

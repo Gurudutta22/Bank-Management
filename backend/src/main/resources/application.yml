@@ -54,7 +54,7 @@ spring:
 
   threads:
     virtual:
-      enabled: true                       # Java 21 virtual threads for request handling
+      enabled: true                       # Java 25 virtual threads for request handling
 
 server:
   port: 8080
@@ -108,6 +108,12 @@ app:
     current-overdraft-limit: 10000.00
   seed:
     enabled: ${SEED_DEMO_DATA:true}
+  # Demo-only convenience: a transfer to a 12-digit account that does not exist auto-creates
+  # a zero-balance account under a pool "walk-in" customer so the demo flow stays unblocked.
+  # Keeps double-entry intact (every rupee lands somewhere real) but turns the destination
+  # endpoint into an enumeration oracle - disabled under the postgres profile below.
+  demo:
+    auto-create-recipient: ${DEMO_AUTO_CREATE:true}
 
 ---
 # =====================================================================================
@@ -133,3 +139,9 @@ spring:
   h2:
     console:
       enabled: false
+
+# Postgres profile overrides - the auto-create oracle is a demo-only shortcut and must
+# never be left on against a real database.
+app:
+  demo:
+    auto-create-recipient: ${DEMO_AUTO_CREATE:false}

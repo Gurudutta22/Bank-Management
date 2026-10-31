@@ -2,6 +2,7 @@ package com.gurudutta.bank.transaction;
 
 import com.gurudutta.bank.account.Account;
 import com.gurudutta.bank.account.AccountRepository;
+import com.gurudutta.bank.account.AccountType;
 import com.gurudutta.bank.audit.AuditService;
 import com.gurudutta.bank.common.exception.InsufficientFundsException;
 import com.gurudutta.bank.common.exception.InvalidOperationException;
@@ -15,6 +16,7 @@ import com.gurudutta.bank.transaction.dto.TransferRequest;
 import com.gurudutta.bank.transaction.dto.TransferResponse;
 import com.gurudutta.bank.transaction.dto.WithdrawRequest;
 import com.gurudutta.bank.user.User;
+import com.gurudutta.bank.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -45,19 +47,29 @@ public class TransactionService {
 
     private static final Logger log = LoggerFactory.getLogger(TransactionService.class);
     private static final ZoneId BANK_ZONE = ZoneId.of("Asia/Kolkata");
+    // The pool owner used by auto-create. Seeded in DemoDataSeeder as a disabled user, so
+    // the account exists in the schema even though nobody can log in as the pool itself.
+    private static final String WALK_IN_EMAIL = "walk-in@novabank.io";
+    private static final java.util.regex.Pattern ACCOUNT_FORMAT =
+            java.util.regex.Pattern.compile("^\\d{12}$");
 
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
     private final AuditService auditService;
     private final AppProperties props;
+    // Only needed for the walk-in pool lookup during auto-create; kept lazy by never calling it
+    // outside the transfer() path.
+    private final UserRepository userRepository;
 
     public TransactionService(AccountRepository accountRepository,
                               TransactionRepository transactionRepository,
                               AuditService auditService,
-                              AppProperties props) {
+                              AppProperties props,
+                              UserRepository userRepository) {
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
         this.auditService = auditService;
+        this.userRepository = userRepository;
         this.props = props;
     }
 
@@ -141,6 +153,13 @@ public class TransactionService {
         if (replayed != null) {
             return toTransferResponse(replayed);
         }
+
+        // Ensure the destination exists BEFORE taking any lock. In demo mode this transparently
+        // creates a walk-in account for the typed number so the UI flow works for any 12-digit
+        // string. Any failure here (bad format, pool user missing, concurrent create race) is
+        // raised cleanly before the FOR UPDATE queue has anything in it, so a lock-ordering slip
+        // can never leak out of this method.
+        ensureDestinationExists(request.fromAccountNumber(), request.toAccountNumber());
 
         // ---- Deadlock avoidance -------------------------------------------------
         // Two simultaneous transfers, A->B and B->A, would deadlock if each locked its own source
@@ -268,6 +287,64 @@ public class TransactionService {
     private Account lockAccount(String accountNumber) {
         return accountRepository.findByAccountNumberForUpdate(accountNumber)
                 .orElseThrow(() -> ResourceNotFoundException.of("Account", accountNumber));
+    }
+
+    /**
+     * Guarantees the transfer's destination account exists before anyone takes a FOR UPDATE lock.
+     *
+     * <p>When {@code app.demo.auto-create-recipient} is on, a transfer to a 12-digit number that
+     * does not exist creates a zero-balance account owned by the seeded walk-in pool user. This
+     * keeps the demo flow unblocked (any account number works) while preserving double-entry: the
+     * destination row is real, so both legs of the transfer land on committed storage.
+     *
+     * <p>When the flag is off, a missing destination surfaces later as the normal 404 from
+     * {@link #lockAccount(String)} - so disabling this method's behaviour is one env var away.
+     *
+     * <p>The source account is NOT auto-created: a transfer from a non-existent account would be
+     * money appearing out of thin air, which is exactly what the double-entry invariant forbids.
+     */
+    private void ensureDestinationExists(String fromNumber, String toNumber) {
+        if (!props.demo().autoCreateRecipient()) {
+            return;
+        }
+        if (accountRepository.existsByAccountNumber(toNumber)) {
+            return;
+        }
+        if (!ACCOUNT_FORMAT.matcher(toNumber).matches()) {
+            // Fall through to the lockAccount 404 so the caller sees the standard
+            // RESOURCE_NOT_FOUND code rather than a demo-flow-specific error.
+            return;
+        }
+        // Safety: never auto-create a destination that would collide with the source. The
+        // same-account check in transfer() already caught that case, but a defensive guard
+        // here means a refactor that moves the check later cannot sneak this past.
+        if (toNumber.equals(fromNumber)) {
+            return;
+        }
+
+        User walkIn = userRepository.findByEmailIgnoreCase(WALK_IN_EMAIL)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Walk-in pool user (" + WALK_IN_EMAIL + ") is not seeded. "
+                                + "Re-run with app.seed.enabled=true or add the user manually."));
+
+        try {
+            Account account = new Account(toNumber, walkIn, AccountType.SAVINGS,
+                    java.math.BigDecimal.ZERO, props.limits().defaultDailyTransferLimit());
+            // saveAndFlush, not save: the subsequent SELECT ... FOR UPDATE must see the row.
+            // Without the flush it would still be in the first-level cache only.
+            accountRepository.saveAndFlush(account);
+            auditService.success("WALK_IN_ACCOUNT_CREATED", "Account", toNumber,
+                    "Auto-created zero-balance recipient for an incoming transfer");
+            log.info("Auto-created walk-in recipient account {} for pool user {}",
+                    toNumber, walkIn.getPublicId());
+        } catch (org.springframework.dao.DataIntegrityViolationException race) {
+            // Two concurrent transfers to the same new number: whoever lost the unique-index
+            // race just reads the winner's row. Lock contention beyond this point is handled
+            // by MoneyMovementFacade's retry policy.
+            if (!accountRepository.existsByAccountNumber(toNumber)) {
+                throw race;
+            }
+        }
     }
 
     private void authoriseOwnership(Account account) {

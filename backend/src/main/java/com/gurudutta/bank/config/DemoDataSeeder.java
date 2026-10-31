@@ -104,6 +104,12 @@ public class DemoDataSeeder implements ApplicationRunner {
         // transfer to "Demo Recipient", watch the receiver balance jump from the opening deposit.
         User demo = user("Demo Recipient", "demo@novabank.io", "9800000099",
                 "Demo@1234", Role.CUSTOMER, LocalDate.of(2000, 1, 1), "Demo account for live transfers");
+        // Pool user that owns every auto-created walk-in account (see TransactionService.transfer()
+        // and app.demo.auto-create-recipient). Disabled so nobody can log in as the pool itself;
+        // it exists only as the owner reference for synthesised destination accounts.
+        User walkIn = user("Walk-in Recipient", "walk-in@novabank.io", "9800000090",
+                "Pool@Disabled123", Role.CUSTOMER, LocalDate.of(2000, 1, 1), "Pool owner for auto-created demo accounts");
+        walkIn.setEnabled(false);
 
         admin.setKycVerified(true);
         priya.setKycVerified(true);
