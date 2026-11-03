@@ -302,6 +302,12 @@ against your local H2 or PostgreSQL — there is no hosted instance to attack.**
 The demo recipient starts with the ₹500 minimum opening balance, so every rupee you send
 shows up clearly against a known baseline.
 
+> **Tip for live demos:** you can also type **any 12-digit number** into the "To account
+> number" field (e.g. `123456789012`, or ask the viewer to pick one). If no such account
+> exists, the backend auto-creates a zero-balance "Walk-in Recipient" account for that
+> exact number and settles the transfer normally. Double-entry stays intact — every rupee
+> lands on a real row. Disabled under the `postgres` profile via `DEMO_AUTO_CREATE=false`.
+
 ---
 
 ## API reference
